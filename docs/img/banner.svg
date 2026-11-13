@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="t">
+  <title id="t">container-inventory: images, application versions and stale containers on every Docker host</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#13284a"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/>
+      <stop offset="1" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="20" fill="url(#bg)"/>
+  <g stroke="#1e3a5f" stroke-width="1" opacity="0.6">
+    <path d="M0 60H1200M0 120H1200M0 180H1200M0 240H1200"/>
+    <path d="M300 0V300M600 0V300M900 0V300"/>
+  </g>
+
+  <!-- stacked containers + magnifier -->
+  <g transform="translate(90 62)">
+    <rect x="0" y="118" width="190" height="52" rx="6" fill="url(#blue)"/>
+    <rect x="20" y="60" width="190" height="52" rx="6" fill="url(#green)"/>
+    <rect x="40" y="2" width="150" height="52" rx="6" fill="url(#amber)"/>
+    <g stroke="#0b1220" stroke-opacity="0.35" stroke-width="3">
+      <path d="M38 126V162M76 126V162M114 126V162M152 126V162"/>
+      <path d="M58 68V104M96 68V104M134 68V104M172 68V104"/>
+      <path d="M78 10V46M116 10V46M154 10V46"/>
+    </g>
+    <circle cx="232" cy="40" r="26" fill="#0b1220" fill-opacity="0.35" stroke="#e2e8f0" stroke-width="7"/>
+    <path d="M251 59L276 84" stroke="#e2e8f0" stroke-width="9" stroke-linecap="round"/>
+  </g>
+
+  <text x="420" y="132" fill="#f8fafc" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="56" font-weight="700">container-inventory</text>
+  <text x="422" y="178" fill="#94a3b8" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="24">Images, app versions and stale containers on every Docker host</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16">
+    <rect x="422" y="208" width="138" height="32" rx="16" fill="#0c4a6e"/><text x="491" y="230" fill="#7dd3fc" text-anchor="middle">stdlib only</text>
+    <rect x="572" y="208" width="253" height="32" rx="16" fill="#14532d"/><text x="698" y="230" fill="#86efac" text-anchor="middle">linux · windows · macos</text>
+    <rect x="837" y="208" width="186" height="32" rx="16" fill="#78350f"/><text x="930" y="230" fill="#fcd34d" text-anchor="middle">Splunk UF add-on</text>
+    <rect x="1035" y="208" width="118" height="32" rx="16" fill="#4c1d95"/><text x="1094" y="230" fill="#c4b5fd" text-anchor="middle">read-only</text>
+  </g>
+</svg>

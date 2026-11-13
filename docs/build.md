@@ -1,41 +1,43 @@
-# Build binary
+# Building binaries
 
-Tool là một file Python chỉ dùng stdlib. Binary đóng gói nó cùng Python runtime bằng [PyInstaller](https://pyinstaller.org) (`--onefile`), nên máy chạy không cần cài Python. PyInstaller không cross-compile: **binary của OS nào phải build trên OS đó**. Vì vậy cách dễ nhất là để GitHub Actions build cả 5 bản.
+English | [Tiếng Việt](vi/build.md)
 
-## Cách 1: GitHub Actions (khuyên dùng)
+The tool is a single standard-library Python file. Binaries bundle it with a Python runtime using [PyInstaller](https://pyinstaller.org) (`--onefile`), so target hosts need no Python. PyInstaller does not cross-compile: **each OS binary must be built on that OS**, which is why GitHub Actions builds all five.
 
-Workflow [`.github/workflows/build.yml`](../.github/workflows/build.yml):
+## GitHub Actions (recommended)
 
-| Sự kiện | Kết quả |
+Workflow: [`.github/workflows/build.yml`](../.github/workflows/build.yml)
+
+| Event | Result |
 |---|---|
-| push lên `main`, pull request | `--selftest` trên Python 3.9 và 3.12, build 5 binary, mỗi binary tự chạy `--selftest`. Binary nằm trong mục *Artifacts* của lần chạy. |
-| push tag `v*` | Như trên, rồi tạo GitHub Release gồm binary, gói Splunk add-on cho từng OS và `SHA256SUMS`. |
+| push to `main`, pull request | `--selftest` on Python 3.9 and 3.13, then 5 binaries, each running its own `--selftest`. Binaries are kept as run artifacts. |
+| tag `v*` | Same, then a GitHub Release with the binaries, one Splunk add-on package per platform, and `SHA256SUMS`. |
 
-Phát hành một version:
+Cutting a release:
 
 ```bash
-# 1. sửa __version__ trong inventory.py và version trong splunk/TA-container-inventory/default/app.conf
-# 2. ghi lại thay đổi vào CHANGELOG.md
+# 1. bump __version__ in inventory.py and version in splunk/TA-container-inventory/default/app.conf
+# 2. add the changes to CHANGELOG.md
 git commit -am "release v0.2.5"
 git tag v0.2.5
 git push origin main v0.2.5
 ```
 
-| Target | Runner | Ghi chú |
+| Target | Runner | Notes |
 |---|---|---|
-| `linux-amd64` | `ubuntu-latest` | build trong container `python:3.11-buster` (glibc 2.28) |
-| `linux-arm64` | `ubuntu-24.04-arm` | như trên, bản arm64 |
+| `linux-amd64` | `ubuntu-latest` | built inside `python:3.11-buster` (glibc 2.28) |
+| `linux-arm64` | `ubuntu-24.04-arm` | same, arm64 |
 | `windows-amd64` | `windows-latest` | Python 3.12 |
 | `macos-arm64` | `macos-latest` | Apple Silicon |
 | `macos-amd64` | `macos-15-intel` | Intel |
 
-**Tại sao Linux build trên Debian 10?** Binary PyInstaller chạy được trên glibc **bằng hoặc mới hơn** glibc của máy build. Nếu build trên Ubuntu 24.04 (glibc 2.39), binary sẽ lỗi `GLIBC_2.xx not found` trên RHEL 8 / Ubuntu 20.04. Build trên glibc 2.28 thì chạy được trên RHEL/Rocky/Alma 8+, Ubuntu 20.04+, Debian 10+. CentOS 7 (glibc 2.17) không hỗ trợ: dùng bản Python, cần Python 3.9+.
+**Why build Linux on Debian 10?** A PyInstaller binary runs on a glibc **equal to or newer than** the build host's. Built on Ubuntu 24.04 (glibc 2.39), it fails with `GLIBC_2.xx not found` on RHEL 8 or Ubuntu 20.04. Built on glibc 2.28, it runs on RHEL / Rocky / Alma 8+, Ubuntu 20.04+ and Debian 10+. CentOS 7 (glibc 2.17) is not supported by the binary; run `inventory.py` with Python 3.9+ there.
 
-## Cách 2: build tay
+## Building by hand
 
-Cần Python 3.9+ trên máy build.
+Requires Python 3.9+ on the build machine.
 
-**Linux** (build trong Docker để có glibc cũ):
+**Linux** (inside Docker, for an old glibc):
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src python:3.11-buster sh -c \
@@ -43,7 +45,7 @@ docker run --rm -v "$PWD":/src -w /src python:3.11-buster sh -c \
 ./dist/container-inventory --selftest
 ```
 
-Chạy lệnh này trên máy arm64 (ví dụ Mac Apple Silicon) sẽ ra binary linux-arm64. Muốn bản amd64 thì thêm `--platform linux/amd64` (chạy qua giả lập, chậm).
+On an arm64 machine (e.g. Apple Silicon) this produces a linux-arm64 binary. Add `--platform linux/amd64` for amd64 (emulated, slow).
 
 **macOS / Windows**:
 
@@ -54,17 +56,17 @@ pyinstaller --onefile --name container-inventory inventory.py
 ./dist/container-inventory --selftest                # Windows: dist\container-inventory.exe --selftest
 ```
 
-## Chạy binary
+## Running the binary
 
-| OS | Lưu ý |
+| OS | Notes |
 |---|---|
-| Linux | `chmod +x`, user phải gọi được Docker. Binary tự giải nén vào `/tmp` mỗi lần chạy. Nếu `/tmp` mount `noexec`, đặt `TMPDIR` sang thư mục khác. |
-| Windows | Chạy được từ PowerShell / cmd. Một số antivirus báo nhầm binary PyInstaller onefile. Khi đó whitelist theo SHA256 trong `SHA256SUMS`. |
-| macOS | Binary chưa ký. Lần đầu chạy cần `xattr -d com.apple.quarantine container-inventory-macos-*`. |
+| Linux | `chmod +x`; the user must be able to reach Docker. The binary unpacks itself to `/tmp` on every run; if `/tmp` is mounted `noexec`, set `TMPDIR` to another directory. |
+| Windows | Runs from PowerShell or cmd. Some antivirus products flag PyInstaller onefile binaries; allow-list by the hash in `SHA256SUMS`. |
+| macOS | The binary is not signed. Before the first run: `xattr -d com.apple.quarantine container-inventory-macos-*`. |
 
-Kiểm tra: `container-inventory --version` và `container-inventory --selftest`.
+Check with `container-inventory --version` and `container-inventory --selftest`.
 
-## Kiểm chứng tải về
+## Verifying downloads
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing          # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing

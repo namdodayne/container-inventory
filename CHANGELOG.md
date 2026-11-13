@@ -1,13 +1,49 @@
-# Changelog & roadmap
+# Changelog
 
-- [x] v0.1: lấy image theo container đang chạy, ra registry/tag/digest, nhận diện tech qua env/cmd/tên, git qua label OCI, mapping app thủ công bằng TOML.
-- [x] v0.1.1: fallback mốc container khi thiếu image; process qua `docker top`; `product` lấy từ label OCI; chạy được trên Python 3.10; apps nhận cả JSON.
-- [x] v0.2 (2026-11-04): base image qua tiền tố layer; `connects` từ env; `--deep`: OS, version runtime, framework (dist-info, manifest), SQLite, ModSecurity/Lua, Go build info (kể cả distroless). Đã chạy thật trên macOS và Ubuntu 22.04: bắt được bunkerweb (FastAPI, SQLAlchemy, ModSecurity, PostgreSQL), fuap_go (Go 1.23.12, lib/pq), cloudflared (Go 1.27.3, quic-go, gRPC, chi).
-- [x] v0.2.1: sửa encoding trên Windows (đã chạy `--deep` trên Windows thật); version npm lấy từ `node_modules` thay vì range; thêm trường `packages`. Đối chiếu với source F-Hacker 2026 (Dockerfile, package.json, go.mod) của 7 service: runtime 7/7 đúng; dependency trực tiếp 36/36 (backend 11, fuap_auth 2, fuap_web 12, fuap_go 11); không báo sai. Miss: thư viện JS frontend nạp từ CDN (chạy ở browser, không nằm trong container); base của các image không có sẵn trên host.
-- [x] v0.2.2: container đã dừng hoặc đang restart được quét bằng `docker export` (`deep_source: "export"`, cần thêm `-a`). Bản ghi export không có version runtime vì không chạy được lệnh `--version`, và không có dữ liệu trong volume. Version lấy từ tên file `.so`: ModSecurity 3.0.17, LuaJIT 2.1. Bỏ `.a`/`.la` (trước đây báo nhầm "Lua" từ `liblua.a`). Thêm version Supervisor. `connects` bắt thêm URL HTTP/WS/gRPC trong các biến `*_URL`/`*_URI`/`*_ENDPOINT`.
-- [x] v0.2.3: version của app (không chỉ runtime): `product_version` + `version_source` lấy từ label OCI/label-schema, fallback sang tag semver. Image local không còn bị thêm `library/`.
-- [x] v0.2.4: `--deep` lấy version app từ `-ldflags -X ...Version=` của binary Go (cloudflared 2026.10.7). Nhận diện image build local trên containerd store qua `buildx history` và label compose. Thêm `containers[].stale` cho container chạy image cũ. Thêm `--ndjson` (cho log agent) và `--version`. Binary PyInstaller cho Linux amd64/arm64 (glibc 2.28), Windows, macOS do GitHub Actions build; add-on Splunk UF `TA-container-inventory` theo từng OS. Tài liệu tách ra `docs/`.
-- [ ] v0.3: quét `node_modules` cho app Node đã bundle; đọc `cargo auditable` cho binary Rust; nhận diện JAR (`META-INF/MANIFEST.MF`, `BOOT-INF/lib`) cho Java.
-- [ ] v0.4: đối chiếu registry: tag hiện tại so với tag mới nhất, digest local so với digest trên registry (biết image đã cũ hoặc bị retag).
-- [ ] v0.5: gom nhiều host, xuất CSV hoặc đẩy vào CMDB.
-- [ ] Sau: SBOM/CVE bằng `syft`/`grype` cho từng image.
+## v0.2.4
+
+- `--deep` reads the application version from Go binaries: `-ldflags -X ...Version=` (cloudflared 2026.10.7) or a real module tag.
+- Local-build detection on the containerd image store (Docker Desktop) through `docker buildx history` and compose build labels.
+- `containers[].stale` and `tag_image_id`: containers still running an image their tag no longer points to.
+- `--ndjson` output for log agents, `--version`.
+- Prebuilt binaries for Linux amd64 / arm64 (glibc 2.28), Windows x64, macOS arm64 / x64, built and released by GitHub Actions.
+- Splunk add-on: `TA-container-inventory` for indexers and search heads, `TA-container-inventory-<os>-<arch>` for Universal Forwarders.
+- Documentation moved to `docs/`, in English and Vietnamese.
+
+## v0.2.3
+
+- Application version, not only runtimes: `product_version` and `version_source` from OCI / label-schema labels, falling back to semver-looking tags.
+- Local images no longer get a `library/` prefix.
+
+## v0.2.2
+
+- Stopped and restarting containers are scanned with `docker export` (`deep_source: "export"`, needs `-a`). No runtime versions there, and no volume data.
+- Versions from `.so` file names: ModSecurity 3.0.17, LuaJIT 2.1. `.a` / `.la` files ignored (previously reported "Lua" from `liblua.a`).
+- Supervisor version. `connects` also picks up HTTP / WS / gRPC URLs in `*_URL`, `*_URI`, `*_ENDPOINT` variables.
+
+## v0.2.1
+
+- Windows console encoding fixed (`--deep` verified on Windows).
+- npm versions taken from `node_modules` instead of manifest ranges; new `packages` field.
+- Checked against the source of the 7 F-Hacker 2026 services (Dockerfile, package.json, go.mod): runtimes 7/7, direct dependencies 36/36, no false positives. Misses: frontend JS loaded from a CDN (runs in the browser, not in the container), and base images not present on the host.
+
+## v0.2 (2026-11-04)
+
+- Base image chain from layer prefixes; `connects` from the environment.
+- `--deep`: OS, runtime versions, frameworks (dist-info, manifests), SQLite, ModSecurity / Lua, Go build info (distroless included).
+- Verified on macOS and Ubuntu 22.04: bunkerweb (FastAPI, SQLAlchemy, ModSecurity, PostgreSQL), fuap_go (Go 1.23.12, lib/pq), cloudflared (Go 1.27.3, quic-go, gRPC, chi).
+
+## v0.1.1
+
+- Container fallback when the image is gone; processes from `docker top`; `product` from OCI labels; Python 3.10 support; JSON apps files.
+
+## v0.1
+
+- Images of running containers with registry / tag / digest; tech from env, cmd and names; git from OCI labels; manual app mapping in TOML.
+
+## Roadmap
+
+- v0.3: scan `node_modules` for bundled Node apps; read `cargo auditable` data from Rust binaries; identify JARs (`META-INF/MANIFEST.MF`, `BOOT-INF/lib`).
+- v0.4: compare against the registry: current tag versus latest tag, local digest versus registry digest (outdated or re-tagged images).
+- v0.5: multi-host collection, CSV export, CMDB push.
+- Later: SBOM and CVE matching with `syft` / `grype` per image.

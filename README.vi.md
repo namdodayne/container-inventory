@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/img/banner.svg" alt="container-inventory" width="100%"></p>
+
 # container-inventory
 
 [![build](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml/badge.svg)](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml)
@@ -11,6 +13,8 @@ Kiểm kê những gì đang chạy trên một Docker host: image lấy từ đ
 Tool là một file Python, không cần dependency. Có sẵn binary cho Linux, Windows và macOS, kèm add-on cho Splunk Universal Forwarder để thu thập trên nhiều host.
 
 ## Thông tin thu được
+
+<p align="center"><img src="docs/img/how-it-works.svg" alt="Docker engine cung cấp dữ liệu cho container-inventory, tool xuất bảng, JSON hoặc NDJSON cho log agent" width="100%"></p>
 
 Với mỗi image có container trên host:
 
@@ -62,16 +66,18 @@ fhacker2026-backend:latest     local                             Node.js 22.23.4
 
 ## Splunk
 
+<p align="center"><img src="docs/img/splunk-flow.svg" alt="Universal Forwarder chạy container-inventory và gửi event tới indexer, search head" width="100%"></p>
+
 Mỗi bản phát hành có kèm add-on cho Splunk:
 
 - `TA-container-inventory.tgz`: cài trên indexer và search head (tách event, trích field JSON)
 - `TA-container-inventory-<os>-<arch>.tgz`: cài trên Universal Forwarder (binary và scripted input chạy mỗi giờ, sourcetype `container:inventory`)
 
-Các agent khác (Filebeat / Elastic Agent, Fluent Bit, Wazuh) đọc output `--ndjson` từ file. Xem [docs/splunk.md](docs/splunk.md).
+Các agent khác (Filebeat / Elastic Agent, Fluent Bit, Wazuh) đọc output `--ndjson` từ file. Xem [docs/vi/splunk.md](docs/vi/splunk.md).
 
 ## Tài liệu
 
-- [docs/spec.md](docs/spec.md): thiết kế, nguồn dữ liệu của từng trường, giới hạn đã biết
-- [docs/build.md](docs/build.md): build binary cho từng nền tảng, quy trình phát hành
-- [docs/splunk.md](docs/splunk.md): Splunk Universal Forwarder và các agent khác
+- [docs/vi/spec.md](docs/vi/spec.md): thiết kế, nguồn dữ liệu của từng trường, giới hạn đã biết
+- [docs/vi/build.md](docs/vi/build.md): build binary cho từng nền tảng, quy trình phát hành
+- [docs/vi/splunk.md](docs/vi/splunk.md): Splunk Universal Forwarder và các agent khác
 - [CHANGELOG.md](CHANGELOG.md): lịch sử phiên bản và roadmap

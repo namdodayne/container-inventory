@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/img/banner.svg" alt="container-inventory" width="100%"></p>
+
 # container-inventory
 
 [![build](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml/badge.svg)](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml)
@@ -11,6 +13,8 @@ Inventory of what runs on a Docker host: where each image comes from, which appl
 It is a single Python file with no dependencies, also published as a standalone binary for Linux, Windows and macOS, with a Splunk Universal Forwarder add-on for fleet-wide collection.
 
 ## What it reports
+
+<p align="center"><img src="docs/img/how-it-works.svg" alt="Docker engine queries feed container-inventory, which writes table, JSON or NDJSON for log agents" width="100%"></p>
 
 For every image behind a container on the host:
 
@@ -62,6 +66,8 @@ fhacker2026-backend:latest     local                             Node.js 22.23.4
 
 ## Splunk
 
+<p align="center"><img src="docs/img/splunk-flow.svg" alt="Universal Forwarder runs container-inventory and sends events to indexers and search heads" width="100%"></p>
+
 Release assets include a Splunk add-on:
 
 - `TA-container-inventory.tgz` for indexers and search heads (event breaking, JSON field extraction)
@@ -71,7 +77,7 @@ Other agents (Filebeat / Elastic Agent, Fluent Bit, Wazuh) can read the `--ndjso
 
 ## Documentation
 
-Detailed documentation is currently in Vietnamese.
+Each page is also available in Vietnamese under [docs/vi](docs/vi).
 
 - [docs/spec.md](docs/spec.md): design, data source of every field, known limitations
 - [docs/build.md](docs/build.md): building binaries for each platform, release workflow

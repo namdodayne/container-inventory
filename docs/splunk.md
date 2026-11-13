@@ -1,41 +1,35 @@
-# Tích hợp Splunk Universal Forwarder
+# Splunk Universal Forwarder integration
 
-```text
- Docker host                                 Splunk
-┌──────────────────────────────────┐     ┌──────────────────────────────────────┐
-│ Splunk UF                        │     │ Indexer / HF   TA-container-inventory │
-│  TA-container-inventory-<target> │────▶│   1 dòng = 1 event (props.conf)      │
-│   mỗi giờ: container-inventory   │     │ Search head    TA-container-inventory │
-│            --ndjson -a           │     │   KV_MODE = json → field tự tách     │
-└──────────────────────────────────┘     └──────────────────────────────────────┘
-```
+English | [Tiếng Việt](vi/splunk.md)
 
-Mỗi lần chạy, tool in ra **một dòng JSON cho mỗi image** (`--ndjson`), gồm cả container đã dừng (`-a`). Sourcetype là `container:inventory`.
+<p align="center"><img src="img/splunk-flow.svg" alt="Docker host with Universal Forwarder sending container:inventory events to indexers and search heads" width="860"></p>
 
-## Gói phát hành
+On each run the tool prints **one JSON line per image** (`--ndjson`), stopped containers included (`-a`). Sourcetype: `container:inventory`.
 
-Có trên trang [Releases](https://github.com/namdodayne/container-inventory/releases/latest):
+## Packages
 
-| Gói | Cài ở đâu | Bên trong |
+Published on [Releases](https://github.com/namdodayne/container-inventory/releases/latest):
+
+| Package | Install on | Contents |
 |---|---|---|
-| `TA-container-inventory.tgz` | Indexer, heavy forwarder, search head | `props.conf` (tách event, field JSON). Không có input. |
-| `TA-container-inventory-linux-amd64.tgz` | UF trên Linux x86_64 | props + `inputs.conf` + binary + `container_inventory.path` |
-| `TA-container-inventory-linux-arm64.tgz` | UF trên Linux arm64 | như trên |
-| `TA-container-inventory-windows-amd64.tgz` | UF trên Windows x64 | như trên, binary `.exe` |
-| `TA-container-inventory-macos-arm64.tgz`, `-macos-amd64.tgz` | UF trên macOS | như trên |
+| `TA-container-inventory.tgz` | Indexers, heavy forwarders, search heads | `props.conf` (event breaking, JSON fields). No input. |
+| `TA-container-inventory-linux-amd64.tgz` | UF on Linux x86_64 | props + `inputs.conf` + binary + `container_inventory.path` |
+| `TA-container-inventory-linux-arm64.tgz` | UF on Linux arm64 | same |
+| `TA-container-inventory-windows-amd64.tgz` | UF on Windows x64 | same, `.exe` binary |
+| `TA-container-inventory-macos-arm64.tgz`, `-macos-amd64.tgz` | UF on macOS | same |
 
-Mỗi target có một tên app riêng. Lý do: file `.path` phải ghi đường dẫn tuyệt đối tới binary, mà đường dẫn này chứa tên app. Nhờ tên riêng, deployment server giữ được tất cả các bản cùng lúc.
+Each target has its own app name. The `.path` file must hold an absolute path to the binary, and that path contains the app name; distinct names also let a deployment server hold every platform side by side.
 
-## 1. Indexer và search head
+## 1. Indexers and search heads
 
 ```bash
 tar -xzf TA-container-inventory.tgz -C $SPLUNK_HOME/etc/apps/
 $SPLUNK_HOME/bin/splunk restart
 ```
 
-Indexer cluster: đặt vào `manager-apps/` rồi apply bundle. Search head cluster: đặt vào `shcluster/apps/` của deployer.
+Indexer cluster: place it in `manager-apps/` and apply the bundle. Search head cluster: place it in the deployer's `shcluster/apps/`.
 
-Nếu muốn dữ liệu vào index riêng, tạo index trước, ví dụ `container_inventory`, rồi đổi `index` ở bước 2.
+To use a dedicated index, create it first (e.g. `container_inventory`) and set `index` in step 3.
 
 ## 2. Universal Forwarder
 
@@ -46,14 +40,14 @@ tar -xzf TA-container-inventory-linux-amd64.tgz -C /opt/splunkforwarder/etc/apps
 sudo -u splunkfwd /opt/splunkforwarder/etc/apps/TA-container-inventory-linux-amd64/bin/container-inventory --version
 ```
 
-**Quyền gọi Docker.** Từ bản 9.1, UF chạy bằng user `splunkfwd` (bản cũ hơn là `splunk`). User này phải đọc được Docker API. Chọn một trong hai cách:
+**Docker access.** Since 9.1 the UF runs as `splunkfwd` (older versions: `splunk`). That user needs to read the Docker API. Pick one:
 
-| Cách | Làm | Đánh đổi |
+| Option | How | Trade-off |
 |---|---|---|
-| A. group `docker` | `sudo usermod -aG docker splunkfwd`, rồi restart UF | ⚠️ Vào được `docker.sock` là có quyền tương đương root trên host. Chạy được `--deep`. |
-| B. socket proxy chỉ đọc (khuyên dùng) | Chạy [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) với `CONTAINERS=1 IMAGES=1 INFO=1`, bind `127.0.0.1:2375`. Thêm `DOCKER_HOST=tcp://127.0.0.1:2375` vào `$SPLUNK_HOME/etc/splunk-launch.conf`, rồi restart UF. | Chỉ cho phép GET, nên không dùng được `--deep` (cần exec). `buildx history` cũng không chạy được, nên nhận diện image local chỉ còn dựa vào `RepoDigests` và label compose. |
+| A. `docker` group | `sudo usermod -aG docker splunkfwd`, then restart the UF | Access to `docker.sock` is root-equivalent on the host. Supports `--deep`. |
+| B. Read-only socket proxy (recommended) | Run [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) with `CONTAINERS=1 IMAGES=1 INFO=1`, bound to `127.0.0.1:2375`. Add `DOCKER_HOST=tcp://127.0.0.1:2375` to `$SPLUNK_HOME/etc/splunk-launch.conf`, then restart the UF. | GET only, so no `--deep` (needs exec). `buildx history` is unavailable too, so local-build detection relies on `RepoDigests` and compose labels. |
 
-Ví dụ chạy proxy cho cách B:
+Proxy for option B:
 
 ```bash
 docker run -d --name docker-ro-proxy --restart unless-stopped \
@@ -64,11 +58,11 @@ docker run -d --name docker-ro-proxy --restart unless-stopped \
 
 ### Windows
 
-Giải nén `TA-container-inventory-windows-amd64.tgz` vào `C:\Program Files\SplunkUniversalForwarder\etc\apps\`, rồi restart service `SplunkForwarder`. Mặc định service chạy bằng `LocalSystem`, tài khoản này gọi được named pipe của Docker. Nếu đổi sang tài khoản dịch vụ khác, thêm tài khoản đó vào group `docker-users` (Docker Desktop) hoặc cấp quyền trên pipe `\\.\pipe\docker_engine`.
+Extract `TA-container-inventory-windows-amd64.tgz` into `C:\Program Files\SplunkUniversalForwarder\etc\apps\` and restart the `SplunkForwarder` service. By default the service runs as `LocalSystem`, which can open the Docker named pipe. With a different service account, add it to `docker-users` (Docker Desktop) or grant it access to `\\.\pipe\docker_engine`.
 
 ### macOS
 
-Như Linux, nhưng trước khi chạy phải gỡ quarantine:
+As on Linux, but clear the quarantine flag first:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/SplunkForwarder/etc/apps/TA-container-inventory-macos-*
@@ -76,7 +70,7 @@ xattr -dr com.apple.quarantine /Applications/SplunkForwarder/etc/apps/TA-contain
 
 ### Deployment server
 
-Đặt các gói forwarder vào `$SPLUNK_HOME/etc/deployment-apps/`, rồi tạo serverclass theo `machineTypesFilter`:
+Put the forwarder packages in `$SPLUNK_HOME/etc/deployment-apps/` and create one server class per platform with `machineTypesFilter`:
 
 ```ini
 # serverclass.conf
@@ -99,51 +93,51 @@ machineTypesFilter = windows-x64
 restartSplunkd = true
 ```
 
-Đổi `whitelist.0` để chỉ chọn các host có chạy Docker.
+Narrow `whitelist.0` to the hosts that run Docker.
 
-## 3. Tuỳ chỉnh
+## 3. Customising
 
-Tạo `local/inputs.conf` trong app của forwarder. Không sửa `default/`, vì lần nâng cấp sau sẽ ghi đè.
+Create `local/inputs.conf` in the forwarder app. Never edit `default/`, which upgrades overwrite.
 
 ```ini
 [script://./bin/container_inventory.path]
 index = container_inventory
-interval = 1800            # giây, hoặc cron: 0 */6 * * *
+interval = 1800            # seconds, or cron: 0 */6 * * *
 ```
 
-Muốn đổi tham số (thêm `--deep`, thêm `--apps`), sửa dòng duy nhất trong `bin/container_inventory.path`. File này nằm ngoài `local/`, nên phải sửa lại sau mỗi lần nâng cấp gói:
+To change arguments (add `--deep` or `--apps`), edit the single line in `bin/container_inventory.path`. That file is outside `local/`, so reapply the change after each upgrade:
 
 ```text
 $SPLUNK_HOME/etc/apps/TA-container-inventory-linux-amd64/bin/container-inventory --ndjson -a --deep --apps /etc/container-inventory/apps.toml
 ```
 
-`--deep` chạy `docker exec -u 0` vào từng container, vì vậy cần cách A ở trên và mất vài phút mỗi host. Nên dùng interval dài, ví dụ 6–24 giờ.
+`--deep` runs `docker exec -u 0` in every container, so it needs option A above and takes minutes per host. Use a long interval, such as 6 to 24 hours.
 
-## 4. Kiểm tra
+## 4. Verifying
 
 ```spl
 index=main sourcetype=container:inventory earliest=-2h
 | stats latest(product) as product latest(registry) as registry by host image
 ```
 
-Không thấy dữ liệu thì xem log của UF:
+No data? Check the forwarder log:
 
 ```bash
 grep -i "container_inventory\|ExecProcessor" /opt/splunkforwarder/var/log/splunk/splunkd.log | tail
 ```
 
-| Lỗi trong splunkd.log | Nguyên nhân |
+| Error in splunkd.log | Cause |
 |---|---|
-| `permission denied ... docker.sock` | User UF chưa vào được Docker, xem mục Quyền gọi Docker. |
-| `failed to connect to the docker API` | Docker không chạy, hoặc `DOCKER_HOST` sai. |
-| `GLIBC_2.xx not found` | OS quá cũ (glibc < 2.28), dùng bản Python thay binary. |
-| `cannot execute ... noexec` | `/tmp` mount `noexec`: thêm `TMPDIR=/opt/splunkforwarder/var/run` vào `splunk-launch.conf`. |
+| `permission denied ... docker.sock` | The UF user cannot reach Docker, see Docker access. |
+| `failed to connect to the docker API` | Docker is not running, or `DOCKER_HOST` is wrong. |
+| `GLIBC_2.xx not found` | OS too old (glibc < 2.28); run `inventory.py` with Python instead. |
+| `cannot execute ... noexec` | `/tmp` is mounted `noexec`: add `TMPDIR=/opt/splunkforwarder/var/run` to `splunk-launch.conf`. |
 
-## 5. Search mẫu
+## 5. Example searches
 
-Mỗi event là một image. Container nằm trong mảng `containers{}`.
+Each event is one image; its containers are in the `containers{}` array.
 
-Version app và nguồn của version:
+Application versions and where each version came from:
 
 ```spl
 index=main sourcetype=container:inventory
@@ -151,7 +145,7 @@ index=main sourcetype=container:inventory
 | table host image registry product product_version version_source
 ```
 
-Container đang chạy image cũ (chưa được tạo lại sau khi build hoặc pull image mới):
+Containers running an outdated image (not recreated after a rebuild or pull):
 
 ```spl
 index=main sourcetype=container:inventory
@@ -161,7 +155,7 @@ index=main sourcetype=container:inventory
 | table host name image tag_image_id status
 ```
 
-Image không rõ version (tag `latest`, không có label):
+Images with no known version (`latest` tag, no label):
 
 ```spl
 index=main sourcetype=container:inventory
@@ -170,22 +164,22 @@ index=main sourcetype=container:inventory
 | stats values(host) as hosts by image
 ```
 
-## Agent khác
+## Other agents
 
-Agent nào đọc được file log cũng dùng được (Elastic Agent / Filebeat, Fluent Bit, Wazuh, Vector...). Cách làm: cho tool ghi NDJSON ra file theo lịch, rồi để agent tail file đó.
+Any agent that tails files works (Elastic Agent / Filebeat, Fluent Bit, Wazuh, Vector, ...): run the tool on a schedule with `--ndjson`, write to a file, and let the agent read it.
 
-Mỗi lần chạy ghi ra **một file mới**. Không ghi đè một file cố định: nội dung đầu file giữa hai lần chạy gần như giống nhau, nên agent nhận diện file theo checksum đầu file (Splunk `monitor`, Filebeat `fingerprint`) sẽ coi là file đã đọc rồi và bỏ qua.
+Write **a new file per run** rather than overwriting one fixed file. The beginning of the output barely changes between runs, so agents that identify files by a checksum of their first bytes (Splunk `monitor`, Filebeat `fingerprint`) would treat a rewritten file as already read and skip it.
 
 ```bash
-# /etc/cron.d/container-inventory: mỗi giờ một file, giữ 2 ngày. Trong crontab, % phải escape thành \%.
+# /etc/cron.d/container-inventory: one file per hour, kept 2 days. In crontab, % must be escaped as \%.
 0 * * * * root d=/var/log/container-inventory; mkdir -p $d && /usr/local/bin/container-inventory --ndjson -a > $d/.tmp && mv $d/.tmp $d/inventory-$(date +\%Y\%m\%d\%H).ndjson && find $d -name '*.ndjson' -mtime +2 -delete
 ```
 
-Windows: dùng Task Scheduler chạy lệnh tương tự, ghi vào `C:\ProgramData\container-inventory\inventory-<giờ>.ndjson`.
+On Windows, use Task Scheduler with the same command, writing to `C:\ProgramData\container-inventory\inventory-<hour>.ndjson`.
 
-| Agent | Cấu hình đọc file |
+| Agent | File input |
 |---|---|
-| Filebeat / Elastic Agent | input `filestream`, `paths: [/var/log/container-inventory/*.ndjson]`, `parsers: - ndjson: {target: ""}` |
+| Filebeat / Elastic Agent | `filestream` input, `paths: [/var/log/container-inventory/*.ndjson]`, `parsers: - ndjson: {target: ""}` |
 | Fluent Bit | `[INPUT] Name tail`, `Path /var/log/container-inventory/*.ndjson`, `Parser json` |
 | Wazuh | `<localfile><log_format>json</log_format><location>/var/log/container-inventory/*.ndjson</location></localfile>` |
-| Splunk UF (thay cho scripted input) | `[monitor:///var/log/container-inventory/*.ndjson]`, `sourcetype = container:inventory` |
+| Splunk UF (instead of the scripted input) | `[monitor:///var/log/container-inventory/*.ndjson]`, `sourcetype = container:inventory` |

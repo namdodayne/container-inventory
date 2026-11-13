@@ -1,54 +1,62 @@
-# Spec
+# Specification
 
-**Mốc là image, không phải container.** Công nghệ, git và registry là thuộc tính của image. Nhiều container (replica, compose scale) dùng chung một image. Vì vậy mỗi bản ghi là một image ID, container nằm trong danh sách `containers` của image đó.
+English | [Tiếng Việt](vi/spec.md)
 
-**Fallback mốc container.** Nếu image đã bị xoá hoặc build lại trùng tag, host chỉ còn container. Khi đó mỗi container là một bản ghi (`anchor: "container"`), dữ liệu lấy từ bản config image mà container còn giữ.
+## Design
 
-**Không cần đệ quy theo tầng image.** Docker gộp ENV và LABEL của mọi tầng FROM vào config của image ngoài cùng. Process và file đọc từ container đang chạy là kết quả cuối của mọi tầng. Chuỗi base (`base`) chỉ dùng để truy nguồn gốc, không cần cho việc nhận diện tech.
+**The image is the anchor, not the container.** Tech stack, git source and registry are properties of an image, and several containers (replicas, compose scale) can share one. Each record is therefore one image ID, with the containers that run it listed under `containers`.
 
-**Môi trường**: Linux, macOS, Windows (Docker Desktop). Đã test: macOS; Ubuntu 22.04 / Python 3.10 (có `--deep`); Ubuntu 24.04 / Python 3.12. Windows mới chạy chế độ mặc định, `--deep` chưa test. Cần Python 3.9+ (hoặc dùng binary đã build sẵn, không cần Python), chỉ dùng stdlib, và `docker` CLI. User chạy script phải gọi được Docker: thuộc group `docker` hoặc dùng `sudo`. File `--apps` dạng TOML cần Python 3.11+ hoặc `pip install tomli`; dạng JSON (`{"app": [...]}`) chạy được mọi bản.
+**Container fallback.** When an image was deleted or rebuilt under the same tag, only the container is left on the host. Each such container becomes its own record (`anchor: "container"`), built from the copy of the image config that the container keeps.
 
-**Đầu vào**
-- Docker daemon lấy theo `DOCKER_HOST` / `DOCKER_CONTEXT`, chạy được với host remote.
-- Mặc định chỉ lấy image có container đang chạy. Cờ `-a` lấy thêm container đã dừng.
-- `--deep`: đọc thêm bên trong container đang chạy, xem bảng dưới.
-- `--apps <file.toml|file.json>`: mapping thủ công, xem [apps.example.toml](apps.example.toml).
+**No walking through image layers.** Docker merges the `ENV` and `LABEL` of every `FROM` stage into the config of the final image, and processes and files read from a running container are the end result of all layers. The base chain (`base`) is reported for provenance only; detection does not need it.
 
-## Chế độ mặc định: chỉ đọc metadata, không exec vào container
+**Platforms.** Linux, macOS, Windows (Docker Desktop). Tested on macOS, Ubuntu 22.04 / Python 3.10 (including `--deep`), Ubuntu 24.04 / Python 3.12, and Windows. Requirements: Python 3.9+ (or a prebuilt binary, which needs no Python), standard library only, and the `docker` CLI. The user running the tool must be able to reach Docker: member of the `docker` group, or `sudo`. A TOML `--apps` file needs Python 3.11+ or `pip install tomli`; a JSON file (`{"app": [...]}`) works everywhere.
 
-| Trường | Lấy từ |
+## Inputs
+
+- The Docker daemon is taken from `DOCKER_HOST` / `DOCKER_CONTEXT`, so remote hosts work.
+- By default only images with a running container are reported. `-a` adds stopped containers.
+- `--deep` also reads inside containers, see below.
+- `--apps <file.toml|file.json>` joins a manual mapping, see [apps.example.toml](../apps.example.toml).
+
+## Default mode: Docker metadata only, no exec
+
+| Field | Source |
 |---|---|
-| `registry`, `repo`, `tag` | Ref mà container dùng khi chạy (`Config.Image`). Image không có registry thì là `docker.io`, không có namespace thì thêm `library/`. Image build trên host này có `registry: local` và không thêm `library/`. Một image được tính là build local khi có một trong ba dấu hiệu: (1) không có `RepoDigests` (chỉ đúng với classic image store); (2) ID image nằm trong output của `docker buildx history` (BuildKit, buildx 0.12+); (3) có label `com.docker.compose.service`, label này compose chỉ gắn vào image do nó build. Nếu container đang chạy image cũ đã mất, script dùng image mà tag hiện trỏ tới để quyết định. |
-| `digest` | Digest trong ref, nếu không có thì lấy `RepoDigests[0]` |
-| `base` | Chuỗi base image, gần nhất đứng trước. Một image local được tính là base nếu danh sách layer (`RootFS.Layers`) của nó là tiền tố thực sự của image này. |
-| `product`, `product_version`, `version_source` | Tên + version của app trong image, ví dụ `bunkerweb v1.6.16`, `kibana 9.3.8`. Tên lấy từ label `org.opencontainers.image.title` / `org.label-schema.name`. Version lấy từ label `org.opencontainers.image.version` / `org.label-schema.version` (`version_source: label`); nếu không có label thì lấy từ tag có dạng semver như `9.3.8`, `v2.45.1`, `1.30.4-alpine` (`version_source: tag`), khi đó tên lấy từ tên repo. Tag `latest`, `15`, `16-alpine` hay tag ngày tháng không được tính là version. Label có thể kế thừa từ base image (ví dụ wolfi-base). |
-| `tech` | 3 nguồn: env `<X>_VERSION` / `<X>_MAJOR` (bảng `ENV_TECH`); tên process trong entrypoint/cmd, tên image và `docker top` (bảng `NAME_TECH`) |
-| `connects` | URI kết nối trong env của container (`postgresql://`, `redis://`, `mongodb+srv://`, `sqlite:///`...) và các biến `<X>_HOST`. Chỉ giữ host:port, **luôn bỏ user/password**. |
-| `git`, `revision` | Label `org.opencontainers.image.source` / `.revision`, hoặc `org.label-schema.vcs-*` |
-| `containers[]` | Tên, id, trạng thái, compose project, port. `stale: true` nghĩa là tag đã được build lại hoặc pull lại, nhưng container vẫn chạy image cũ (container chưa được tạo lại). `tag_image_id` là ID image mà tag đang trỏ tới. |
-| `app` | Mapping thủ công. `[[app]]` đầu tiên có glob `match` khớp `<registry>/<repo>` hoặc tên container sẽ được dùng. `git` khai báo tay ghi đè `git` lấy từ label. |
+| `registry`, `repo`, `tag` | The reference the container was started with (`Config.Image`). No registry means `docker.io`, and no namespace means `library/`. Images built on this host get `registry: local` and no `library/` prefix. An image counts as built locally when any of these holds: (1) it has no `RepoDigests` (classic image store only); (2) its ID is an output of `docker buildx history` (BuildKit, buildx 0.12+); (3) it carries the `com.docker.compose.service` label, which compose only adds to images it builds. When the container's own image is gone, the image its tag points to now is used for this decision. |
+| `digest` | Digest in the reference, otherwise `RepoDigests[0]` |
+| `base` | Base image chain, nearest first. A local image is a base when its layer list (`RootFS.Layers`) is a proper prefix of this image's. |
+| `product`, `product_version`, `version_source` | Name and version of the application in the image, e.g. `bunkerweb v1.6.16`, `kibana 9.3.8`. The name comes from `org.opencontainers.image.title` / `org.label-schema.name`. The version comes from `org.opencontainers.image.version` / `org.label-schema.version` (`version_source: label`); without such a label, from a semver-looking tag such as `9.3.8`, `v2.45.1`, `1.30.4-alpine` (`version_source: tag`), with the name taken from the repository. Tags like `latest`, `15`, `16-alpine` or dates are never treated as versions. Labels can be inherited from a base image (e.g. wolfi-base). |
+| `tech` | Three sources: `<X>_VERSION` / `<X>_MAJOR` environment variables (`ENV_TECH` table); process names in entrypoint / cmd, the image name, and `docker top` (`NAME_TECH` table) |
+| `connects` | Connection URIs in the container environment (`postgresql://`, `redis://`, `mongodb+srv://`, `sqlite:///`, ...) and `<X>_HOST` variables. Only host:port is kept; **user and password are always dropped**. |
+| `git`, `revision` | Labels `org.opencontainers.image.source` / `.revision`, or `org.label-schema.vcs-*` |
+| `containers[]` | Name, id, status, compose project, ports. `stale: true` means the tag was rebuilt or re-pulled but the container still runs the older image (it was not recreated). `tag_image_id` is the image the tag points to now. |
+| `app` | Manual mapping. The first `[[app]]` whose `match` glob matches `<registry>/<repo>` or a container name is used. A `git` value set there overrides the label. |
 
-## `--deep`: đọc bên trong container đang chạy
+## `--deep`: reading inside containers
 
-Chế độ này chạy `docker exec -u 0 <ctr> sh -c <script>`. Script chỉ đọc: `cat`, `find`, `readlink`, và lệnh `--version` của các runtime đã biết. Ngoài ra dùng `docker cp` để copy binary của process ra host đọc. Mỗi image chỉ quét một container, ưu tiên container đang chạy. Container đã dừng hoặc đang `restarting` (cần `-a`) được đọc bằng `docker export` thay cho `exec` (`deep_source: "export"`): không có version runtime, không có dữ liệu trong volume.
+This mode runs `docker exec -u 0 <ctr> sh -c <script>`. The script only reads: `cat`, `find`, `readlink`, and `--version` of known runtimes. Process binaries are copied out with `docker cp` and parsed on the host. One container is scanned per image, a running one when available. Stopped or restarting containers (needs `-a`) are read with `docker export` instead of `exec` (`deep_source: "export"`): no runtime versions, and no data from volumes.
 
-| Trường | Lấy từ |
+| Field | Source |
 |---|---|
-| `os` | `PRETTY_NAME` trong `/etc/os-release` |
-| `tech` (version) | Lệnh `<bin> --version` (hoặc `-v`). Chỉ điền version cho tech đã xác định là đang chạy, không thêm runtime chỉ được cài sẵn. |
-| `tech` (lib nhúng) | File `libmodsecurity*` → ModSecurity; `libluajit*` → LuaJIT; `liblua*` → Lua |
-| `frameworks` | 3 nguồn, đối chiếu với bảng `FRAMEWORKS`: (1) Python `*.dist-info` cho version đúng bản đang cài; (2) manifest trong WorkingDir, `/app`, `/srv`, `/opt`...: `package.json`, `requirements*.txt`, `pyproject.toml`, `go.mod`, `composer.json`, `pom.xml`, `build.gradle*`, `Gemfile`, `Cargo.toml`, `*.csproj`; (3) dependency của binary Go |
-| `packages` | Mọi dependency tìm được, không lọc theo bảng `FRAMEWORKS`: `npm:<name>` lấy từ `dependencies` trong `package.json`, version là bản cài thật trong `node_modules` (nếu không có thì lấy range trong manifest); `pypi:<name>` lấy từ dist-info (gồm cả transitive); `go:<module>` lấy từ go.mod hoặc binary; `composer:<name>`. Bảng chỉ hiện số lượng, chi tiết xem ở `--json`. |
-| `data_files`, `tech.SQLite` | File `*.sqlite`, `*.sqlite3`, `*.db` có header là `SQLite format 3` |
-| `product_version` (`version_source: binary`) | Chỉ dùng khi label và tag không cho ra version. Lấy từ Go build info của binary: `-ldflags -X ...Version=` (ví dụ cloudflared `main.Version=2026.10.7`), nếu không có thì lấy tag thật của module chính. Pseudo-version `v0.0.0-…` và `(devel)` bị bỏ qua. |
-| `binaries[]` | Binary của mọi process trong container (`/proc/*/exe`, fallback sang `cmdline` khi bị rosetta/qemu hoặc khác uid), copy ra bằng `docker cp` để đọc Go build info: version Go, module chính, dependency. Image distroless không có `sh` thì dùng binary trong entrypoint. |
+| `os` | `PRETTY_NAME` in `/etc/os-release` |
+| `tech` (version) | `<bin> --version` (or `-v`). Versions are only filled in for tech already known to be running, not for runtimes that are merely installed. |
+| `tech` (embedded libraries) | `libmodsecurity*` → ModSecurity; `libluajit*` → LuaJIT; `liblua*` → Lua |
+| `frameworks` | Three sources, matched against the `FRAMEWORKS` table: (1) Python `*.dist-info`, for the exact installed version; (2) manifests in the working directory, `/app`, `/srv`, `/opt`, ...: `package.json`, `requirements*.txt`, `pyproject.toml`, `go.mod`, `composer.json`, `pom.xml`, `build.gradle*`, `Gemfile`, `Cargo.toml`, `*.csproj`; (3) dependencies of Go binaries |
+| `packages` | Every dependency found, not filtered by `FRAMEWORKS`: `npm:<name>` from `dependencies` in `package.json`, with the version actually installed in `node_modules` (or the manifest range); `pypi:<name>` from dist-info (transitive included); `go:<module>` from go.mod or binaries; `composer:<name>`. The table shows a count only; see `--json`. |
+| `data_files`, `tech.SQLite` | `*.sqlite`, `*.sqlite3`, `*.db` files starting with `SQLite format 3` |
+| `product_version` (`version_source: binary`) | Only when labels and tag give no version. Taken from the Go build info of the binary: `-ldflags -X ...Version=` (e.g. cloudflared `main.Version=2026.10.7`), otherwise a real tag of the main module. Pseudo-versions `v0.0.0-…` and `(devel)` are ignored. |
+| `binaries[]` | Binaries of every process in the container (`/proc/*/exe`, falling back to `cmdline` under rosetta / qemu or a different uid), copied out with `docker cp` to read Go build info: Go version, main module, dependencies. Distroless images without `sh` use the entrypoint binary. |
 
-**Đầu ra**: bảng (mặc định), `--json` (mảng JSON có thụt dòng) hoặc `--ndjson` (mỗi dòng một bản ghi JSON, dùng cho log agent). Mỗi image là một bản ghi.
+## Output
 
-**Giới hạn đã biết**
-- `base` chỉ tìm được khi image gốc có sẵn trên host **và cùng kiến trúc**. Ví dụ `custom_waf26` là amd64, còn bunkerweb local là arm64, nên layer khác nhau và không ra base.
-- Containerd store (Docker Desktop): image build bằng `docker build` mà build history đã bị xoá, lại không qua compose, sẽ bị tính là `docker.io`. Trường hợp này dùng `--apps` để gán đúng.
-- Framework Node chỉ lấy từ `package.json` của app. Nếu app đã bundle thành `dist/` mà không giữ `package.json` thì sẽ miss. Chưa quét `node_modules`.
-- Binary Rust, C/C++ chưa đọc được dependency. Binary Go build trước Go 1.18 không có build info dạng inline.
-- `FRAMEWORKS` là danh sách chọn lọc, nên package không có trong bảng sẽ không hiện. Muốn bắt thêm thì thêm một dòng vào bảng.
-- Không có `--deep` thì container đã dừng chỉ có tech lấy từ env/cmd.
+Table (default), `--json` (indented JSON array) or `--ndjson` (one compact JSON record per line, for log agents). One record per image.
+
+## Known limitations
+
+- `base` is only found when the base image is present on the host **with the same architecture**. For example `custom_waf26` is amd64 while the local bunkerweb is arm64, so the layers differ and no base is reported.
+- Containerd image store (Docker Desktop): an image built with plain `docker build`, whose build history was pruned and that did not go through compose, is reported as `docker.io`. Use `--apps` to correct it.
+- Node frameworks are read from the app's `package.json` only. Apps bundled into `dist/` without their `package.json` are missed; `node_modules` is not scanned yet.
+- Rust and C/C++ binaries: dependencies are not read. Go binaries built before Go 1.18 have no inline build info.
+- `FRAMEWORKS` is a curated list; packages not in it do not appear under `frameworks` (they are still in `packages`). Add a line to the table to track more.
+- Without `--deep`, stopped containers only get tech from env / cmd.
