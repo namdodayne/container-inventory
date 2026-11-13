@@ -1,0 +1,18 @@
+# Manual app mapping for inventory.py --apps.
+# Each [[app]] is checked in order; the first whose `match` glob hits
+# "<registry>/<repo>" (e.g. docker.io/library/nginx) or the container name wins.
+# `git` overrides the OCI source label. Every other key is free-form and shows up under "app" in --json.
+
+[[app]]
+match = "registry.acme.vn/shop/*"
+name = "shop-api"
+owner = "team-shop"
+env = "prod"
+git = "https://git.acme.vn/shop/api"
+registry = "registry.acme.vn/shop/api"
+
+[[app]]
+match = "docker.io/library/postgres"
+name = "shop-db"
+owner = "team-platform"
+env = "prod"

@@ -1,0 +1,11 @@
+# inventory output of a real host: never commit
+output.json
+*.ndjson
+inventory.json
+# PyInstaller
+build/
+dist/
+*.spec
+__pycache__/
+.venv/
+.DS_Store

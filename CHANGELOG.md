@@ -1,0 +1,13 @@
+# Changelog & roadmap
+
+- [x] v0.1: lấy image theo container đang chạy, ra registry/tag/digest, nhận diện tech qua env/cmd/tên, git qua label OCI, mapping app thủ công bằng TOML.
+- [x] v0.1.1: fallback mốc container khi thiếu image; process qua `docker top`; `product` lấy từ label OCI; chạy được trên Python 3.10; apps nhận cả JSON.
+- [x] v0.2 (2026-11-04): base image qua tiền tố layer; `connects` từ env; `--deep`: OS, version runtime, framework (dist-info, manifest), SQLite, ModSecurity/Lua, Go build info (kể cả distroless). Đã chạy thật trên macOS và Ubuntu 22.04: bắt được bunkerweb (FastAPI, SQLAlchemy, ModSecurity, PostgreSQL), fuap_go (Go 1.23.12, lib/pq), cloudflared (Go 1.27.3, quic-go, gRPC, chi).
+- [x] v0.2.1: sửa encoding trên Windows (đã chạy `--deep` trên Windows thật); version npm lấy từ `node_modules` thay vì range; thêm trường `packages`. Đối chiếu với source F-Hacker 2026 (Dockerfile, package.json, go.mod) của 7 service: runtime 7/7 đúng; dependency trực tiếp 36/36 (backend 11, fuap_auth 2, fuap_web 12, fuap_go 11); không báo sai. Miss: thư viện JS frontend nạp từ CDN (chạy ở browser, không nằm trong container); base của các image không có sẵn trên host.
+- [x] v0.2.2: container đã dừng hoặc đang restart được quét bằng `docker export` (`deep_source: "export"`, cần thêm `-a`). Bản ghi export không có version runtime vì không chạy được lệnh `--version`, và không có dữ liệu trong volume. Version lấy từ tên file `.so`: ModSecurity 3.0.17, LuaJIT 2.1. Bỏ `.a`/`.la` (trước đây báo nhầm "Lua" từ `liblua.a`). Thêm version Supervisor. `connects` bắt thêm URL HTTP/WS/gRPC trong các biến `*_URL`/`*_URI`/`*_ENDPOINT`.
+- [x] v0.2.3: version của app (không chỉ runtime): `product_version` + `version_source` lấy từ label OCI/label-schema, fallback sang tag semver. Image local không còn bị thêm `library/`.
+- [x] v0.2.4: `--deep` lấy version app từ `-ldflags -X ...Version=` của binary Go (cloudflared 2026.10.7). Nhận diện image build local trên containerd store qua `buildx history` và label compose. Thêm `containers[].stale` cho container chạy image cũ. Thêm `--ndjson` (cho log agent) và `--version`. Binary PyInstaller cho Linux amd64/arm64 (glibc 2.28), Windows, macOS do GitHub Actions build; add-on Splunk UF `TA-container-inventory` theo từng OS. Tài liệu tách ra `docs/`.
+- [ ] v0.3: quét `node_modules` cho app Node đã bundle; đọc `cargo auditable` cho binary Rust; nhận diện JAR (`META-INF/MANIFEST.MF`, `BOOT-INF/lib`) cho Java.
+- [ ] v0.4: đối chiếu registry: tag hiện tại so với tag mới nhất, digest local so với digest trên registry (biết image đã cũ hoặc bị retag).
+- [ ] v0.5: gom nhiều host, xuất CSV hoặc đẩy vào CMDB.
+- [ ] Sau: SBOM/CVE bằng `syft`/`grype` cho từng image.
