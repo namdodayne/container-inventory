@@ -1,85 +1,79 @@
-<p align="center">
-  <img src="docs/banner.svg" alt="container-inventory" width="100%">
-</p>
+# container-inventory
 
-<p align="center">
-  <a href="https://github.com/namdodayne/container-inventory/actions/workflows/build.yml"><img alt="build" src="https://github.com/namdodayne/container-inventory/actions/workflows/build.yml/badge.svg"></a>
-  <a href="https://github.com/namdodayne/container-inventory/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/namdodayne/container-inventory?sort=semver&color=0284c7"></a>
-  <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
-  <img alt="deps" src="https://img.shields.io/badge/dependencies-0-22c55e">
-  <img alt="platforms" src="https://img.shields.io/badge/platform-linux%20%7C%20windows%20%7C%20macos-64748b">
-  <img alt="splunk" src="https://img.shields.io/badge/Splunk-UF%20add--on-f59e0b?logo=splunk&logoColor=white">
-</p>
+[![build](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml/badge.svg)](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/namdodayne/container-inventory?sort=semver)](https://github.com/namdodayne/container-inventory/releases/latest)
+![python](https://img.shields.io/badge/python-3.9%2B-blue)
 
-<p align="center">
-  <b>Trên host này đang chạy gì, version nào, lấy từ đâu, container nào chưa được deploy lại?</b><br>
-  Một file Python (hoặc một binary), không dependency, chỉ đọc. Kết quả đẩy thẳng vào Splunk.
-</p>
+English | [Tiếng Việt](README.vi.md)
 
----
+Inventory of what runs on a Docker host: where each image comes from, which application and version it ships, which runtimes and libraries it contains, what it connects to, and which containers still run an outdated image.
 
-## Tính năng
+It is a single Python file with no dependencies, also published as a standalone binary for Linux, Windows and macOS, with a Splunk Universal Forwarder add-on for fleet-wide collection.
 
-| | |
+## What it reports
+
+For every image behind a container on the host:
+
+- **Origin**: registry, repository, tag, digest, base image chain. Images built on the host are reported as `local`, including on Docker Desktop's containerd image store.
+- **Application version**: `product` and `product_version`, taken from OCI / label-schema labels, a semver tag, or Go build info (`--deep`). `version_source` records which one was used.
+- **Tech stack**: runtimes with versions (Node.js, Python, Java, Go, nginx, PostgreSQL, Redis, ...). With `--deep`: frameworks, every package, SQLite files, ModSecurity / LuaJIT.
+- **Connections**: databases and services the app talks to, read from environment variables. Credentials are always stripped.
+- **Containers**: name, status, compose project, ports, and `stale` when the tag now points to a newer image than the one the container runs.
+- **Source**: git repository and revision from image labels, optional manual mapping to app / owner / environment.
+
+By default the tool only reads Docker metadata (`docker inspect`, `docker top`). `--deep` additionally runs read-only commands inside containers (`docker exec`, `docker cp`, `docker export`).
+
+## Install
+
+Download a binary from [Releases](https://github.com/namdodayne/container-inventory/releases/latest):
+
+| Platform | Asset |
 |---|---|
-| 📦 **Nguồn gốc image** | registry, repo, tag, digest, chuỗi base image; nhận diện image **build local** (kể cả trên containerd store của Docker Desktop) |
-| 🏷️ **Version app** | `kibana 9.3.8`, `cloudflared 2026.10.7`… lấy từ label OCI, tag semver hoặc Go build info, kèm `version_source` để biết độ tin cậy |
-| 🧱 **Tech stack** | runtime + version (Node, Python, Java, Go, nginx, PostgreSQL, Redis…), framework và package (`--deep`), SQLite, ModSecurity/LuaJIT |
-| 🔌 **Kết nối** | app nói chuyện với PostgreSQL / Redis / Mongo / HTTP nào, lấy từ env, **luôn bỏ user/password** |
-| ⏳ **Container stale** | tag đã được build/pull lại nhưng container vẫn chạy image cũ |
-| 🔗 **Git & app** | repo + commit từ label, mapping thủ công app / owner / env qua TOML |
-| 🛡️ **An toàn** | mặc định chỉ đọc metadata của Docker; `--deep` chỉ chạy lệnh đọc (`cat`, `find`, `--version`) |
-
-## Bắt đầu nhanh
-
-**Binary** (không cần Python): tải từ [Releases](https://github.com/namdodayne/container-inventory/releases/latest).
-
-| OS | File |
-|---|---|
-| Linux x86_64 / arm64 | `container-inventory-linux-amd64`, `-linux-arm64` (glibc ≥ 2.28: RHEL/Rocky 8+, Ubuntu 20.04+, Debian 10+) |
+| Linux x86_64, arm64 (glibc 2.28+) | `container-inventory-linux-amd64`, `container-inventory-linux-arm64` |
 | Windows x64 | `container-inventory-windows-amd64.exe` |
-| macOS Apple Silicon / Intel | `container-inventory-macos-arm64`, `-macos-amd64` |
+| macOS Apple Silicon, Intel | `container-inventory-macos-arm64`, `container-inventory-macos-amd64` |
+
+Or run `inventory.py` directly with Python 3.9+.
+
+The user running it must be able to reach the Docker API: member of the `docker` group, `sudo`, or `DOCKER_HOST` pointing to a read-only socket proxy.
+
+## Usage
 
 ```bash
-chmod +x container-inventory-linux-amd64
-./container-inventory-linux-amd64 -a            # bảng, gồm cả container đã dừng
-./container-inventory-linux-amd64 -a --json     # bản ghi đầy đủ
-./container-inventory-linux-amd64 -a --deep     # + framework, package, Go build info
+container-inventory                      # table, running containers
+container-inventory -a                   # include stopped containers
+container-inventory -a --json            # full records
+container-inventory -a --ndjson          # one record per line, for log agents
+container-inventory -a --deep            # frameworks, packages, Go build info
+container-inventory --apps apps.toml     # join manual app / owner / git mapping
+DOCKER_CONTEXT=prod container-inventory  # remote Docker host
+container-inventory --selftest
 ```
 
-**Python** (3.9+, chỉ stdlib):
-
-```bash
-./inventory.py -a
-./inventory.py -a --deep --apps apps.toml --json > inventory.json
-DOCKER_CONTEXT=prod-host ./inventory.py         # Docker remote
-./inventory.py --selftest
-```
-
-User chạy tool phải gọi được Docker: thuộc group `docker`, dùng `sudo`, hoặc trỏ `DOCKER_HOST` tới một socket proxy chỉ đọc.
-
-## Ví dụ đầu ra
+Example (table output, trimmed):
 
 ```text
-IMAGE                          REGISTRY  PRODUCT               TECH                          CONTAINERS
-custom_waf26:latest            ghcr.io   bunkerweb v1.6.16     nginx 1.30.5, Python, Redis   team1_fuap_bunkerweb
-louislam/uptime-kuma:2.5.6     docker.io uptime-kuma 2.5.6     Node.js 22.22.3, Yarn 1.22.22 uptime-kuma
-cloudflare/cloudflared:latest  docker.io cloudflared 2026.10.7 Go 1.27.3                     tunnel          (--deep)
-fhacker2026-backend:latest     local                           Node.js 22.23.4, Yarn 1.22.22 backend-1 (stale)
+IMAGE                          REGISTRY   PRODUCT                TECH                            CONTAINERS
+custom_waf26:latest            ghcr.io    bunkerweb v1.6.16      nginx 1.30.5, Python, Redis     team1_fuap_bunkerweb
+louislam/uptime-kuma:2.5.6     docker.io  uptime-kuma 2.5.6      Node.js 22.22.3, Yarn 1.22.22   uptime-kuma
+cloudflare/cloudflared:latest  docker.io  cloudflared 2026.10.7  Go 1.27.3                       tunnel
+fhacker2026-backend:latest     local                             Node.js 22.23.4, Yarn 1.22.22   backend-1 (stale)
 ```
 
-Mỗi bản ghi `--json` / `--ndjson` có các trường chính: `image`, `registry`, `repo`, `tag`, `digest`, `base`, `product`, `product_version`, `version_source`, `tech`, `frameworks`, `packages`, `connects`, `git`, `revision`, `containers[]` (`name`, `status`, `compose_project`, `ports`, `stale`), `app`. Chi tiết từng trường: [docs/spec.md](docs/spec.md).
+## Splunk
 
-## Tích hợp
+Release assets include a Splunk add-on:
 
-| | |
-|---|---|
-| 🟧 **Splunk Universal Forwarder** | Add-on `TA-container-inventory` đóng gói sẵn cho từng OS: [docs/splunk.md](docs/splunk.md) |
-| 🧰 **Agent khác** (Elastic Agent, Filebeat, Fluent Bit, Wazuh…) | chạy `--ndjson` theo lịch, ghi ra file, agent tail file: [docs/splunk.md#agent-khác](docs/splunk.md#agent-khác) |
+- `TA-container-inventory.tgz` for indexers and search heads (event breaking, JSON field extraction)
+- `TA-container-inventory-<os>-<arch>.tgz` for Universal Forwarders (binary and scripted input, hourly, sourcetype `container:inventory`)
 
-## Tài liệu
+Other agents (Filebeat / Elastic Agent, Fluent Bit, Wazuh) can read the `--ndjson` output from a file. See [docs/splunk.md](docs/splunk.md).
 
-- [docs/spec.md](docs/spec.md): thiết kế, nguồn dữ liệu của từng trường, giới hạn đã biết
-- [docs/build.md](docs/build.md): build binary cho Linux / Windows / macOS, phát hành bằng GitHub Actions
-- [docs/splunk.md](docs/splunk.md): tích hợp Splunk UF và các agent khác
-- [CHANGELOG.md](CHANGELOG.md): lịch sử phiên bản và roadmap
+## Documentation
+
+Detailed documentation is currently in Vietnamese.
+
+- [docs/spec.md](docs/spec.md): design, data source of every field, known limitations
+- [docs/build.md](docs/build.md): building binaries for each platform, release workflow
+- [docs/splunk.md](docs/splunk.md): Splunk Universal Forwarder and other agents
+- [CHANGELOG.md](CHANGELOG.md): version history and roadmap
