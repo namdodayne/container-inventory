@@ -19,14 +19,13 @@ env:
 jobs:
   selftest:
     runs-on: ubuntu-latest
+    # Oldest supported and current Python; official images, since runners drop old versions.
+    container: python:${{ matrix.python }}-slim
     strategy:
       matrix:
-        python: ["3.9", "3.12"]
+        python: ["3.9", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
       - run: python inventory.py --selftest
 
   binary:
