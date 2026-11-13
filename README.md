@@ -1,9 +1,6 @@
 <p align="center"><img src="docs/img/banner.svg" alt="container-inventory" width="100%"></p>
 
-# container-inventory
-
 [![build](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml/badge.svg)](https://github.com/namdodayne/container-inventory/actions/workflows/build.yml)
-[![release](https://img.shields.io/github/v/release/namdodayne/container-inventory?sort=semver)](https://github.com/namdodayne/container-inventory/releases/latest)
 ![python](https://img.shields.io/badge/python-3.9%2B-blue)
 
 English | [Tiếng Việt](README.vi.md)
